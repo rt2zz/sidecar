@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
 
 import { afterEach, describe, expect, test } from "vitest";
 
@@ -203,12 +202,4 @@ function initRepo(): string {
   git(repo, ["config", "user.name", "Test User"]);
   git(repo, ["config", "user.email", "test@example.com"]);
   return repo;
-}
-
-function run(command: string, args: string[], cwd: string): string {
-  const result = spawnSync(command, args, { cwd, encoding: "utf8" });
-  if (result.status !== 0) {
-    throw new Error(result.stderr || result.stdout);
-  }
-  return result.stdout;
 }
