@@ -61,6 +61,7 @@ describe("sidecar CLI integration", () => {
     const secondMain = initMainRepo();
 
     runSidecar(["init", remote], firstMain);
+    gitRaw(["--git-dir", remote, "symbolic-ref", "HEAD", "refs/heads/master"]);
     runSidecar(["init", remote], secondMain);
 
     const firstInbox = git(path.join(firstMain, "sidecar"), ["branch", "--show-current"]).stdout.trim();

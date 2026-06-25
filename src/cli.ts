@@ -381,8 +381,9 @@ export function cloneOrUpdate(root: string, config: SidecarConfig, bootstrapMain
 }
 
 export function bootstrapMainBranch(repo: string, config: SidecarConfig): void {
+  if (remoteRefExists(repo, config.branch)) return;
+
   if (hasAnyCommit(repo)) {
-    if (remoteRefExists(repo, config.branch)) return;
     const current = git(repo, ["branch", "--show-current"]).stdout.trim();
     if (current !== config.branch) {
       if (branchExists(repo, config.branch)) {
