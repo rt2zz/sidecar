@@ -15,6 +15,24 @@ The model is intentionally simple:
 
 ## Quick start
 
+Install from GitHub:
+
+```sh
+npm install -g github:rt2zz/sidecar
+```
+
+Or link a local checkout:
+
+```sh
+git clone git@github.com:rt2zz/sidecar.git
+cd sidecar
+npm install
+npm run build
+npm link
+```
+
+`sidecar` requires Node.js 20 or newer and Git.
+
 ```sh
 cd ~/dev/my-repo
 sidecar init git@github.com:org/my-repo-sidecar.git
@@ -108,6 +126,9 @@ and clean up the forked files manually or with a future interactive resolver.
 
 ```sh
 npm install
+npm run check
 npm test
 npm run build
 ```
+
+`npm test` runs the build first, then executes unit and integration tests.

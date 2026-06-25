@@ -102,6 +102,90 @@ describe("redaction", () => {
     expect(redacted).toContain("On May 20, 2026, update apps/backend/convex/messages.ts for Acme Corp.");
   });
 
+  test("redacts env-style secret assignments", () => {
+    const redacted = redactText(
+      [
+        "OPENAI_API_KEY=sk-test1234567890abcdef",
+        "DATABASE_PASSWORD=\"hunter2\"",
+        "AWS_SECRET_ACCESS_KEY='super-secret-value'",
+        "PRIVATE_KEY=-----BEGIN_FAKE_KEY-----",
+      ].join("\n"),
+    );
+
+    expect(redacted).toContain("OPENAI_API_KEY=<API_KEY>");
+    expect(redacted).toContain('DATABASE_PASSWORD="<SECRET>"');
+    expect(redacted).toContain("AWS_SECRET_ACCESS_KEY='<SECRET>'");
+    expect(redacted).toContain("PRIVATE_KEY=<SECRET>");
+    expect(redacted).not.toContain("hunter2");
+    expect(redacted).not.toContain("super-secret-value");
+  });
+
+  test("redacts JSON secret fields", () => {
+    const redacted = redactText(
+      JSON.stringify({
+        apiKey: "sk-test1234567890abcdef",
+        nested: {
+          refreshToken: "refresh-token-value",
+          clientSecret: "client-secret-value",
+        },
+      }),
+    );
+
+    expect(redacted).toContain('"apiKey":"<API_KEY>"');
+    expect(redacted).toContain('"refreshToken":"<TOKEN>"');
+    expect(redacted).toContain('"clientSecret":"<SECRET>"');
+    expect(redacted).not.toContain("sk-test");
+    expect(redacted).not.toContain("refresh-token-value");
+    expect(redacted).not.toContain("client-secret-value");
+  });
+
+  test("redacts YAML-style fields and bearer headers", () => {
+    const redacted = redactText(
+      [
+        "token: ghp_abcdefghijklmnopqrstuvwxyz1234567890",
+        "secret_key: very-secret",
+        "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.payload.signature",
+      ].join("\n"),
+    );
+
+    expect(redacted).toContain("token: <TOKEN>");
+    expect(redacted).toContain("secret_key: <SECRET>");
+    expect(redacted).toContain("Authorization: Bearer <TOKEN>");
+    expect(redacted).not.toContain("ghp_");
+    expect(redacted).not.toContain("very-secret");
+    expect(redacted).not.toContain("eyJhbGciOi");
+  });
+
+  test("redacts common provider token patterns", () => {
+    const slackToken = ["xo", "xb-1234567890-abcdefghijklmnop"].join("");
+    const redacted = redactText(
+      [
+        "sk-ant-abcdefghijklmnopqrstuvwxyz123456",
+        "github_pat_abcdefghijklmnopqrstuvwxyz1234567890",
+        slackToken,
+        "AKIAABCDEFGHIJKLMNOP",
+        "eyJhbGciOiJIUzI1NiJ9.payload.signature",
+      ].join("\n"),
+    );
+
+    expect(redacted).toBe(["<API_KEY>", "<TOKEN>", "<TOKEN>", "<API_KEY>", "<TOKEN>"].join("\n"));
+  });
+
+  test("does not redact ordinary coding context or invalid card-like numbers", () => {
+    const input = [
+      "const tokenCount = 10;",
+      "const secretSauce = recipe;",
+      "On May 20, 2026, update apps/backend/convex/messages.ts for Acme Corp.",
+      "tracking id 1234-5678-9012-3456",
+    ].join("\n");
+
+    expect(redactText(input)).toBe(input);
+  });
+
+  test("redacts valid credit-card-looking numbers", () => {
+    expect(redactText("card: 4111 1111 1111 1111")).toBe("card: <CREDITCARD>");
+  });
+
   test("redacts text files in the sidecar tree before staging", () => {
     const repo = initRepo();
     fs.writeFileSync(path.join(repo, "notes.md"), "GITHUB_TOKEN=ghp_abcdefghijklmnopqrstuvwxyz1234567890\n", "utf8");

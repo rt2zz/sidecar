@@ -1,14 +1,13 @@
-const CREDENTIAL_KEY_PATTERN =
-  String.raw`(?:openai[_-]?api[_-]?key|anthropic[_-]?api[_-]?key|aws[_-]?secret[_-]?access[_-]?key|api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|auth[_-]?token|github[_-]?token|bearer[_-]?token|client[_-]?secret|secret[_-]?key|private[_-]?key|password|passwd|pwd|passphrase|token|secret)`;
+const KEY_NAME_PATTERN = String.raw`[A-Za-z_][A-Za-z0-9_-]*`;
 
 const QUOTED_KEY_SECRET_REGEX = new RegExp(
-  String.raw`(["'])(${CREDENTIAL_KEY_PATTERN})\1(\s*:\s*)(["'])([^"'\r\n]+)(\4)`,
-  "gi",
+  String.raw`(["'])(${KEY_NAME_PATTERN})\1(\s*:\s*)(["'])([^"'\r\n]+)(\4)`,
+  "g",
 );
 
 const ASSIGNMENT_SECRET_REGEX = new RegExp(
-  String.raw`\b(${CREDENTIAL_KEY_PATTERN})(\s*[:=]\s*)(["']?)([^\s"',;` + "`" + String.raw`]+)(\3)`,
-  "gi",
+  String.raw`\b(${KEY_NAME_PATTERN})(\s*[:=]\s*)(["']?)([^\s"',;` + "`" + String.raw`]+)(\3)`,
+  "g",
 );
 
 const AUTHORIZATION_HEADER_REGEX = /\b(authorization\s*:\s*bearer\s+)([^\s"',;`]+)/gi;
@@ -37,18 +36,21 @@ export function redactText(input: string): string {
     .replace(
       QUOTED_KEY_SECRET_REGEX,
       (
-        _match,
+        match,
         keyQuote: string,
         key: string,
         separator: string,
         valueQuote: string,
         _value: string,
-      ) => `${keyQuote}${key}${keyQuote}${separator}${valueQuote}${placeholderForKey(key)}${valueQuote}`,
+      ) =>
+        isSensitiveKey(key)
+          ? `${keyQuote}${key}${keyQuote}${separator}${valueQuote}${placeholderForKey(key)}${valueQuote}`
+          : match,
     )
     .replace(
       ASSIGNMENT_SECRET_REGEX,
-      (_match, key: string, separator: string, quote: string) =>
-        `${key}${separator}${quote}${placeholderForKey(key)}${quote}`,
+      (match, key: string, separator: string, quote: string) =>
+        isSensitiveKey(key) ? `${key}${separator}${quote}${placeholderForKey(key)}${quote}` : match,
     );
 
   for (const [pattern, replacement] of TOKEN_PATTERNS) {
@@ -68,6 +70,47 @@ function placeholderForKey(key: string): string {
   if (/api[_-]?key/i.test(key)) return "<API_KEY>";
   if (/password|passwd|pwd|passphrase|secret|private/i.test(key)) return "<SECRET>";
   return "<TOKEN>";
+}
+
+function isSensitiveKey(key: string): boolean {
+  const normalized = key.replace(/-/g, "_");
+  const lower = normalized.toLowerCase();
+  const compact = lower.replace(/_/g, "");
+  const compactSensitive = new Set([
+    "apikey",
+    "accesstoken",
+    "refreshtoken",
+    "idtoken",
+    "authtoken",
+    "githubtoken",
+    "bearertoken",
+    "clientsecret",
+    "secretkey",
+    "privatekey",
+    "password",
+    "passwd",
+    "pwd",
+    "passphrase",
+    "token",
+    "secret",
+  ]);
+  if (compactSensitive.has(compact)) return true;
+
+  const parts = normalized
+    .toUpperCase()
+    .split("_")
+    .filter(Boolean);
+  const last = parts.at(-1);
+  if (["PASSWORD", "PASSWD", "PWD", "PASSPHRASE", "TOKEN", "SECRET"].includes(last ?? "")) {
+    return true;
+  }
+  if (parts.includes("API") && parts.includes("KEY")) return true;
+  if (parts.includes("ACCESS") && parts.includes("TOKEN")) return true;
+  if (parts.includes("REFRESH") && parts.includes("TOKEN")) return true;
+  if (parts.includes("SECRET") && (parts.includes("KEY") || parts.includes("ACCESS"))) return true;
+  if (parts.includes("PRIVATE") && parts.includes("KEY")) return true;
+
+  return false;
 }
 
 function isLikelyCreditCard(value: string): boolean {
